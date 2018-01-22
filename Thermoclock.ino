@@ -40,12 +40,6 @@ const int thermIn = A0;
 const int thermMin = 600;
 const int thermMax = 755;
 
-// We have calibration data that can be changed later
-// Corresponding entries are in raw thermistor readings
-// and in degrees F.
-int calPointsRaw[] = {672, 724};
-int calPointsF[] = {65, 99};
-
 // We have a configurable temperature to maintain
 int targetTempF = 65;
 // And a range for it.
@@ -103,10 +97,11 @@ int getRawTemp() {
     return analogRead(thermIn);
 }
 
-// Convert a raw temp to degrees F according to the conversion data
+// Convert a raw temp to degrees F according to the conversion
+// formula based on linear regression. Then fudge based on the
+// calibrating thermometer being very wrong.
 int rawToF(int raw) {
-  return map(raw, calPointsRaw[0], calPointsRaw[1],
-    calPointsF[0], calPointsF[1]);
+  return round(0.1525 * raw - 31.80 - 3);
 }
 
 // We have some schedule functions
@@ -221,7 +216,7 @@ void loop() {
     if (cold) {
       printString6Flash("HEAT  ", currentState == STATE_START);
     } else {
-      lcd.print("OK    ");
+      lcd.print("ARM   ");
     }
   } else {
     lcd.print("DISARM");
