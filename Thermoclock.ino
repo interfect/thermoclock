@@ -29,22 +29,23 @@ typedef enum State {
 
 State currentState = STATE_START;
 
-// Use a PNP transistor as a switch.
-// Low is on, high is off.
+// Use a relay as a switch.
+// Low is off, high is on.
 const int switchControl = 9;
 
 // Use a 210k/whatever thermistor I found voltage divider
 const int thermIn = A0;
 // Higher heat = less thermistor resistance = more positive
-// We want the temp to stay in this range
-const int thermMin = 600;
-const int thermMax = 755;
+// Reasonable values are ~600-755
 
 // We have a configurable temperature to maintain
 int targetTempF = 65;
 // And a range for it.
 const int targetTempMin = 60;
 const int targetTempMax = 80;
+// We have some hysteresis; we turn on this far below the target
+// or lower, and off this far above it or higher.
+const int tempTolerance = 1;
 
 // And we have a fixed schedule during which to operate
 const int startHour = 8;
@@ -86,9 +87,18 @@ int buttonDown(int buttonNum) {
   return buttonNewState[buttonNum] && !buttonLastState[buttonNum];
 }
 
+// We track the heater switch state for hysteresis.
+int switchState = 0;
+
 // Function to set switch to state. 1 = on, 0 = off
 void setSwitch(int state) {
-  digitalWrite(switchControl, state ? LOW : HIGH);
+  digitalWrite(switchControl, state ? HIGH : LOW);
+  switchState = state;
+}
+
+// Get whether the switch was on or off.
+int getSwitchState() {
+  return switchState;
 }
 
 // Get the current temperature in degrees Arduino.
@@ -112,10 +122,18 @@ int shouldBeArmed(time_t t) {
   return hour(t) >= startHour && hour(t) < endHour;
 }
 
-// This returns if it is too cold.
+// This returns if it is too cold and we need to turn on
+// the heat.
 // It takes a raw sensor reading, not a temp in f.
 int isTooCold(int rawTemp) {
-  return rawToF(rawTemp) < targetTempF;
+  return rawToF(rawTemp) <= targetTempF - tempTolerance;
+}
+
+// This returns if it is too hot and we need to turn off
+// the heat.
+// It takes a raw sensor reading, not a temp in f.
+int isTooHot(int rawTemp) {
+  return rawToF(rawTemp) >= targetTempF + tempTolerance;
 }
 
 // Now we have some lcd printing functions
@@ -144,13 +162,13 @@ void printPad2Flash(int val, int shouldFlash) {
   }
 }
 
-// Print a 6-character string, flashing
-void printString6Flash(const char* string, int shouldFlash) {
+// Print a 7-character string, flashing
+void printString7Flash(const char* string, int shouldFlash) {
   if (shouldFlash &&
     millis() % (2 * flashPeriodMs) < flashPeriodMs) {
       
     // Display the other thing
-    lcd.print("      ");
+    lcd.print("       ");
   } else {
     // Display the actual value
     lcd.print(string);
@@ -210,16 +228,28 @@ void loop() {
   
   // Decide whether to be armed or not
   int armed = shouldBeArmed(t);
+  // And whether the temp is out of bounds
   int cold = isTooCold(rawTemp);
+  int hot = isTooHot(rawTemp);
+  // And whether we are heating
+  int heating = getSwitchState();
+ 
   
-  if (armed) {
-    if (cold) {
-      printString6Flash("HEAT  ", currentState == STATE_START);
-    } else {
-      lcd.print("ARM   ");
-    }
+  if (heating) {
+    printString7Flash("HEATING", heating);
+  } else if(cold && armed) {
+    // Probably in the menu
+    printString7Flash("HEAT   ", 0);
+  } else if (hot) {
+    printString7Flash("TOO HOT", 0);
+  } else if (armed) {
+    // We know it's not cold
+    printString7Flash("TEMP OK", 0);
+  } else if (cold) {
+    // We know we're not armed
+    printString7Flash("COLD   ", 0);
   } else {
-    lcd.print("DISARM");
+    printString7Flash("STANDBY", 0);
   }
   
   // Handle input
@@ -283,13 +313,18 @@ void loop() {
   }
   
   // Now do the actual heater code
-  // Hysteresis is for wimps.
-  if (currentState == STATE_START && armed && cold) {
+  // Hysteresis is important
+  
+  if (hot || !armed || currentState != STATE_START) {
+    // We are not supposed to be running! Turn off right now!
+    // Note that we don't want to run when someone is adjusting us.
+    setSwitch(0);
+  } else if (currentState == STATE_START && armed && cold) {
     // Turn on the heat!
     setSwitch(1);
-  } else {
-    // Turn it off
-    setSwitch(0);
   }
+  
+  // We don't actually need to look at the heating flag
+  // The heater will stay on until we turn it off.
   
 }
