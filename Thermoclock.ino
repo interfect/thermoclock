@@ -52,14 +52,14 @@ const int startHour = 8;
 const int endHour = 23;
 
 // Set up the LCD screen
-const int lcdReset = 12;
-const int lcdEnable = 11;
-const int lcdData[] = {5, 4, 3, 2};
+const int lcdReset = 9;
+const int lcdEnable = 8;
+const int lcdData[] = {7, 6, 5, 4};
 LiquidCrystal lcd(lcdReset, lcdEnable,
   lcdData[0], lcdData[1], lcdData[2], lcdData[3]);
 
 // We also have two buttons
-const int buttons[] = {6, 7};
+const int buttons[] = {2, 3};
 
 // Function to read button state. Pressed = 1, not pressed = 0
 int readButton(int buttonPin) {
