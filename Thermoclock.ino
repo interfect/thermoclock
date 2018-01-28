@@ -31,7 +31,7 @@ State currentState = STATE_START;
 
 // Use a relay as a switch.
 // Low is off, high is on.
-const int switchControl = 9;
+const int switchControl = 13;
 
 // Use a 210k/whatever thermistor I found voltage divider
 const int thermIn = A0;
@@ -43,9 +43,13 @@ int targetTempF = 65;
 // And a range for it.
 const int targetTempMin = 60;
 const int targetTempMax = 80;
-// We have some hysteresis; we turn on this far below the target
-// or lower, and off this far above it or higher.
-const int tempTolerance = 1;
+// The temperature sensor is noisy and may flick up or down
+// before the temperature really gets there.
+// So we have some hysteresis; we turn on this far below the target
+// or lower.
+const int tempToleranceDown = 2;
+// And we turn off this far above it or higher.
+const int tempToleranceUp = 2;
 
 // And we have a fixed schedule during which to operate
 const int startHour = 8;
@@ -111,7 +115,7 @@ int getRawTemp() {
 // formula based on linear regression. Then fudge based on the
 // calibrating thermometer being very wrong.
 int rawToF(int raw) {
-  return round(0.1525 * raw - 31.80 - 3);
+  return round(0.1674 * raw - 45.19 - 3);
 }
 
 // We have some schedule functions
@@ -322,6 +326,9 @@ void loop() {
   } else if (currentState == STATE_START && armed && cold) {
     // Turn on the heat!
     setSwitch(1);
+  } else if(currentState == STATE_START && armed && !hot) {
+    // Keep the same state
+    setSwitch(heating);
   }
   
   // We don't actually need to look at the heating flag
