@@ -56,10 +56,13 @@ const int startHour = 8;
 const int endHour = 23;
 
 // Set up the LCD screen
-const int lcdReset = 9;
-const int lcdEnable = 8;
-const int lcdData[] = {7, 6, 5, 4};
-LiquidCrystal lcd(lcdReset, lcdEnable,
+const int lcdReset = 4;
+const int lcdRW = 5;
+const int lcdEnable = 6;
+const int lcdUnused1 = 7;
+const int lcdUnused2 = 8;
+const int lcdData[] = {9, 10, 11, 12};
+LiquidCrystal lcd(lcdReset, lcdRW, lcdEnable,
   lcdData[0], lcdData[1], lcdData[2], lcdData[3]);
 
 // We also have two buttons
@@ -130,14 +133,14 @@ int shouldBeArmed(time_t t) {
 // the heat.
 // It takes a raw sensor reading, not a temp in f.
 int isTooCold(int rawTemp) {
-  return rawToF(rawTemp) <= targetTempF - tempTolerance;
+  return rawToF(rawTemp) <= targetTempF - tempToleranceDown;
 }
 
 // This returns if it is too hot and we need to turn off
 // the heat.
 // It takes a raw sensor reading, not a temp in f.
 int isTooHot(int rawTemp) {
-  return rawToF(rawTemp) >= targetTempF + tempTolerance;
+  return rawToF(rawTemp) >= targetTempF + tempToleranceUp;
 }
 
 // Now we have some lcd printing functions
@@ -200,6 +203,10 @@ void setup() {
   pinMode(buttons[1], INPUT_PULLUP);
   // Start out with the switch off
   setSwitch(0);
+
+  // Hold unused LCD pins low
+  digitalWrite(lcdUnused1, LOW);
+  digitalWrite(lcdUnused2, LOW);
 
   // Set up LCD
   lcd.begin(16, 2);
