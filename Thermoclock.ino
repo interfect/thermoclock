@@ -9,22 +9,21 @@
 
 // We control the thermostat and clock with a
 // big 2-button state machine.
-// A lot of our states have slow and fast variants for
-// push vs. hold on the advance button.
+// Normally the two buttons will adjust the temperature setpoint.
+// If you press both, you go into set mode
+// Then, one button will cycle states, and the other will change the value.
 typedef enum State {
   // Start state, or just operating.
+  // Also allows temperature to be set on button up.
   STATE_START,
-  // Set thermostat
-  STATE_SET_TARGET,
+  // Both buttons were pressed, but we haven't released them both yet
+  STATE_ENTER_SET,
   // Set hour
   STATE_SET_HOUR,
-  //STATE_SET_HOUR_FAST,
   // Set minute
   STATE_SET_MINUTE,
-  //STATE_SET_MINUTE_FAST,
   // Set second
   STATE_SET_SECOND
-  //STATE_SET_SECOND_FAST
  };
 
 State currentState = STATE_START;
@@ -90,8 +89,16 @@ void updateButtonStates() {
 
 // Now we have functions to detect events.
 // This is true on the loop that the button was pressed on
-int buttonDown(int buttonNum) {
+int singleButtonDown(int buttonNum) {
   return buttonNewState[buttonNum] && !buttonLastState[buttonNum];
+}
+// This is true the loop the button was released on
+int singleButtonUp(int buttonNum) {
+  return !buttonNewState[buttonNum] && buttonLastState[buttonNum];
+}
+// And we wrap the state access for user code
+int buttonIsDown(int buttonNum) {
+  return buttonNewState[buttonNum];
 }
 
 // We track the heater switch state for hysteresis.
@@ -192,6 +199,8 @@ void printTime(time_t t) {
 
 
 
+
+
 void setup() {
   // Start serial
   Serial.begin(9600);
@@ -227,7 +236,7 @@ void loop() {
   lcd.print((char)223);
   lcd.print("F");
   lcd.print("/");
-  printPad2Flash(targetTempF, currentState == STATE_SET_TARGET);
+  printPad2Flash(targetTempF, false);
   lcd.print((char)223);
   lcd.print("F");
   
@@ -247,57 +256,101 @@ void loop() {
  
   
   if (heating) {
+    // We are running the heater!
     printString7Flash("HEATING", heating);
+  } else if (currentState == STATE_ENTER_SET) {
+    // We are going to set the clock.
+    // Let the user know they did something.
+    printString7Flash("SETUP  ", true);
   } else if(cold && armed) {
     // Probably in the menu
-    printString7Flash("HEAT   ", 0);
+    printString7Flash("HEAT   ", false);
   } else if (hot) {
-    printString7Flash("TOO HOT", 0);
+    printString7Flash("TOO HOT", false);
   } else if (armed) {
     // We know it's not cold
-    printString7Flash("TEMP OK", 0);
+    printString7Flash("TEMP OK", false);
   } else if (cold) {
     // We know we're not armed
-    printString7Flash("COLD   ", 0);
+    printString7Flash("COLD   ", false);
   } else {
-    printString7Flash("STANDBY", 0);
+    printString7Flash("STANDBY", false);
   }
   
   // Handle input
-  if (buttonDown(0)) {
+  if (singleButtonDown(0)) {
     // Left button was pressed.
+      
     // Switch major states.
     switch (currentState) {
       case STATE_START:
-        currentState = STATE_SET_TARGET;
+        if (buttonIsDown(1)) {
+          // This is the start of a 2-button press to enter set mode
+          currentState = STATE_ENTER_SET;
+        }
+        // We control temperature on button up
         break;
-      case STATE_SET_TARGET:
-        currentState = STATE_SET_HOUR;
+      default:
+        break;
+    }
+  }
+  
+  if (singleButtonUp(0)) {
+    // On button up we do real things
+    switch (currentState) {
+      case STATE_START:
+        if (targetTempF < targetTempMax) {
+          // Raise temperature
+          targetTempF++;
+        }
+        break;
+      case STATE_ENTER_SET:
+        if (!buttonIsDown(1)) {
+          // Both buttons released, enter set mode
+          currentState = STATE_SET_HOUR;
+        }
         break;
       case STATE_SET_HOUR:
+        // Advance state
         currentState = STATE_SET_MINUTE;
         break;
       case STATE_SET_MINUTE:
+        // Advance state
         currentState = STATE_SET_SECOND;
         break;
       case STATE_SET_SECOND:
+        // Finish setting
         currentState = STATE_START;
         break;
     }
   }
   
-  if (buttonDown(1)) {
+  if (singleButtonDown(1)) {
     // Right button was pressed.
+    switch (currentState) {
+      case STATE_START:
+        if (buttonIsDown(0)) {
+          // This is the start of a 2-button press to enter set mode
+          currentState = STATE_ENTER_SET;
+        }
+      default:
+        break;
+    }
+  }
+  
+  if (singleButtonUp(1)) {
     // Do actual changes
     switch (currentState) {
       case STATE_START:
-        // TODO: do something cool?
+        if (targetTempF > targetTempMin) {
+          // Lower temperature
+          targetTempF--;
+        }
         break;
-      case STATE_SET_TARGET:
-        // Adjust set point
-        targetTempF++;
-        if (targetTempF > targetTempMax) {
-          targetTempF = targetTempMin;
+      case STATE_ENTER_SET:
+        if (!buttonIsDown(0)) {
+          // Both buttons released, enter set mode
+          currentState = STATE_SET_HOUR;
         }
         break;
       case STATE_SET_HOUR:
